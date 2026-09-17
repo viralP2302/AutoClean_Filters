@@ -9,5 +9,5 @@ Nothing here is run by hand; run_pipeline.sh calls each at its stage:
 | shard_blind_input.py | judge | split pending (not-yet-judged) ids across endpoints |
 
 Stage-owned pieces live with their stages: the default sampling targets are
-`01_sampling/configs/judge_round_targets.conf`; the post-labeling statistics
+`configs/judge_round_targets.conf`; the post-labeling statistics
 tool is `02_llm_labeling/compute_label_stats.py`.

@@ -36,7 +36,7 @@ Smoke run (20 docs per endpoint, server kept up for iteration):
    * label the existing 20k sample (the default `--sample-dir`): nothing
      else to pass;
    * start from the corpus: pass a `--sample-dir` that does not exist yet —
-     stage 0 samples it first (targets in `01_sampling/configs/judge_round_targets.conf`).
+     stage 0 samples it first (targets in `configs/judge_round_targets.conf`).
 4. **Watch**: `serve/vllm-*.log` (server), `judge_out/*.log` (clients),
    `squeue` for the jobs. Interrupted? **Rerun the identical command** —
    every already-judged id is skipped, the server is reused if alive.
@@ -48,7 +48,7 @@ Smoke run (20 docs per endpoint, server kept up for iteration):
 
 | stage | what | skip condition |
 |---|---|---|
-| sample | `01_sampling` (`qf_tuner sample` on one node via sbatch, then `annotate`): stratified draw over the labeled corpus with the allowlist targets in `01_sampling/configs/judge_round_targets.conf` (kept 2,000 + 1,285 per content rule; prefilters excluded by construction) | `sample.parquet` exists in `--sample-dir` |
+| sample | `01_sampling` (`qf_tuner sample` on one node via sbatch, then `annotate`): stratified draw over the labeled corpus with the allowlist targets in `configs/judge_round_targets.conf` (kept 2,000 + 1,285 per content rule; prefilters excluded by construction) | `sample.parquet` exists in `--sample-dir` |
 | blind | `sample.parquet` → `blind_input.jsonl` (`{id: uid, text, coverage:"complete"}`); blinding happens here — qf_reason/signals never leave the parquet | file exists |
 | serve | sbatch one 8-GPU node (our account), runs `scripts/serve_judge_vllm.sh` (adapted from viral's, env-driven): up to 4× TP=2 vLLM endpoints, GPU-cleanliness preflight, writes `serve/endpoints.txt` | serve job still running |
 | judge | pending ids (not yet in any `judge_out/shard_*.jsonl`) split round-robin across endpoints; one `run_inference.py` client per shard, in parallel; repeats rounds until every id has a decision (`--max-rounds`) | nothing pending |

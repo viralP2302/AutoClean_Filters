@@ -51,7 +51,7 @@ echo "== sample:           $SAMPLE_DIR"
 # ---- stage 0: sampling (01_sampling — runs when the sample doesn't exist) --
 if [[ ! -s "$SAMPLE_DIR/sample.parquet" ]]; then
   echo "== no sample.parquet at $SAMPLE_DIR — running the sampling stage"
-  read -r -a SAMPLE_TARGETS < "$PIPELINE_DIR/01_sampling/configs/judge_round_targets.conf"
+  read -r -a SAMPLE_TARGETS < "$PIPELINE_DIR/configs/judge_round_targets.conf"
   export QF_SAMPLING_ROOT="$PIPELINE_DIR/01_sampling" PIPELINE_PYTHON="$PYTHON"
   SAMPLE_JOB=$(sbatch --parsable "$PIPELINE_DIR/01_sampling/scripts/run_sample.sbatch" \
       "$PIPELINE_DIR/01_sampling/configs/datasets/keenable.yaml" "$SAMPLE_DIR" \
