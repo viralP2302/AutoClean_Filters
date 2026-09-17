@@ -1,0 +1,85 @@
+# Rule-chain declaration for this pack. THE ORDER IS THE PRODUCTION CHAIN ORDER.
+#
+# Each entry: name (= the qf_reason label), kind, which signal column it reads,
+# which thresholds.yaml key it compares against. Five kinds cover the chain:
+#   greater_than    reject if signal >  threshold
+#   less_than       reject if signal <  threshold
+#   outside_range   reject if signal outside [low, high]
+#   any_ngram_over  reject if any {signal_prefix}_{n} > its per-n threshold
+#   flag            reject if the boolean signal is true (active only while the
+#                   `enabled_by` thresholds key is true)
+#
+# This table is what qf-tuner interprets to re-evaluate rules on stored
+# measurements (src/qf_tuner/annotate/rules.py). If a filter version adds/removes/
+# reorders rules, edit THIS file in that pack — the sampling invariant
+# (first violation must reproduce qf_reason, 100%) verifies the table against
+# the real code's behaviour.
+
+- name: line_dup_frac
+  kind: greater_than
+  signal: fraction_of_duplicate_lines
+  threshold: fraction_of_duplicate_lines
+- name: line_dup_char_frac
+  kind: greater_than
+  signal: fraction_of_characters_in_duplicate_lines
+  threshold: fraction_of_characters_in_duplicate_lines
+- name: para_dup_frac
+  kind: greater_than
+  signal: fraction_of_duplicate_paragraphs
+  threshold: fraction_of_duplicate_paragraphs
+- name: para_dup_char_frac
+  kind: greater_than
+  signal: fraction_of_characters_in_duplicate_paragraphs
+  threshold: fraction_of_characters_in_duplicate_paragraphs
+- name: common_ngram
+  kind: any_ngram_over
+  signal_prefix: common_ngram_frac
+  threshold: fraction_of_characters_in_most_common_ngram
+- name: dup_ngram
+  kind: any_ngram_over
+  signal_prefix: dup_ngram_frac
+  threshold: fraction_of_characters_in_duplicate_ngrams
+- name: ending_ellipsis
+  kind: greater_than
+  signal: fraction_of_lines_ending_with_ellipsis
+  threshold: fraction_of_lines_ending_with_ellipsis
+- name: starting_bullet
+  kind: greater_than
+  signal: fraction_of_lines_starting_with_bullet_point
+  threshold: fraction_of_lines_starting_with_bullet_point
+- name: word_count
+  kind: outside_range
+  signal: word_count
+  threshold: word_count
+- name: mean_word_length
+  kind: outside_range
+  signal: mean_word_length
+  threshold: mean_word_length
+- name: num_of_sentences
+  kind: less_than
+  signal: num_of_sentences
+  threshold: num_of_sentences
+- name: symbol_to_word_ratio
+  kind: greater_than
+  signal: symbol_to_word_ratio
+  threshold: symbol_to_word_ratio
+- name: alpha_charcter        # [sic] — matches the production counter spelling
+  kind: less_than
+  signal: fraction_of_words_with_alpha_character
+  threshold: fraction_of_words_with_alpha_character
+- name: num_of_stop_words
+  kind: less_than
+  signal: num_of_stop_words
+  threshold: num_of_stop_words
+- name: curly_bracket         # declared but inactive: has_curly_bracket is false
+  kind: flag
+  signal: has_curly_bracket
+  enabled_by: has_curly_bracket
+- name: lorem_ipsum
+  kind: flag
+  signal: has_lorem_ipsum
+  enabled_by: has_lorem_ipsum
+- name: line_correction
+  kind: greater_than
+  signal: fraction_of_words_corrected_in_lines
+  threshold: fraction_of_words_corrected_in_lines

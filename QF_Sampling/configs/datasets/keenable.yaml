@@ -1,0 +1,22 @@
+# keenable web-text corpus, full-20260708 drop, after md-strip and CC QF.
+name: keenable
+kind: qf_output_parquet   # fast path: QF output shards already carry qf_reason + signals
+
+qf_root: /mnt/vast01/shared/ifm_data/qf_full-20260708
+raw_root: /mnt/vast01/shared/ifm_data/md_strip_full-20260708
+manifest: /mnt/vast01/users/pochun.chang/projects/keenable/md-conversion/manifests/all_files.txt
+
+reason_column: qf_reason   # value `kept` = accepted (reserved, docs/NAMING.md)
+columns:
+  id: uid
+  url: url
+  vendor_lang: language
+  text_raw: text          # column name of the raw text in raw_root shards
+
+notes: |
+  qf_root shards carry EVERY document (kept and rejected) with qf_reason and the
+  full quality-signal columns; `text` there is the QF-view text (line-filtered +
+  ftfy + PII-scrubbed for documents that reached the signal stage, untouched
+  input text for lang/url rejects). raw_root shards mirror qf_root shards 1:1
+  by file name and row order; `text` there is the pre-QF md-strip output.
+  Produced by projects/keenable/quality-filtering/qf_keenable.py.

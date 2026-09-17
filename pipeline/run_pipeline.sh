@@ -48,6 +48,22 @@ WORKDIR="$(cd "$WORKDIR" && pwd)"
 echo "== pipeline workdir: $WORKDIR"
 echo "== sample:           $SAMPLE_DIR"
 
+# ---- stage 0: sampling (QF_Sampling — runs when the sample doesn't exist) --
+if [[ ! -s "$SAMPLE_DIR/sample.parquet" ]]; then
+  echo "== no sample.parquet at $SAMPLE_DIR — running the sampling stage"
+  read -r -a SAMPLE_TARGETS < "$PIPELINE_DIR/sample_targets.default"
+  export QF_SAMPLING_ROOT="$REPO_DIR/QF_Sampling" PIPELINE_PYTHON="$PYTHON"
+  SAMPLE_JOB=$(sbatch --parsable "$REPO_DIR/QF_Sampling/scripts/run_sample.sbatch" \
+      "$REPO_DIR/QF_Sampling/configs/datasets/keenable.yaml" "$SAMPLE_DIR" \
+      "${SAMPLE_TARGETS[@]}")
+  echo "== sampling job $SAMPLE_JOB submitted, waiting"
+  while squeue -j "$SAMPLE_JOB" -h 2>/dev/null | grep -q .; do sleep 60; done
+  [[ -s "$SAMPLE_DIR/sample.parquet" ]] || {
+    echo "sampling job $SAMPLE_JOB produced no sample.parquet — see logs/" >&2; exit 3; }
+  PYTHONPATH="$REPO_DIR/QF_Sampling/src" "$PYTHON" -m qf_tuner annotate \
+      --sample "$SAMPLE_DIR" --pack "$REPO_DIR/QF_Sampling/filter_packs/cc_baseline"
+fi
+
 # ---- stage 1: blind input --------------------------------------------------
 BLIND="$WORKDIR/blind_input.jsonl"
 if [[ -s "$BLIND" ]]; then
