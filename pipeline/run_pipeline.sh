@@ -51,7 +51,7 @@ echo "== sample:           $SAMPLE_DIR"
 # ---- stage 0: sampling (01_sampling — runs when the sample doesn't exist) --
 if [[ ! -s "$SAMPLE_DIR/sample.parquet" ]]; then
   echo "== no sample.parquet at $SAMPLE_DIR — running the sampling stage"
-  read -r -a SAMPLE_TARGETS < "$PIPELINE_DIR/sample_targets.default"
+  read -r -a SAMPLE_TARGETS < "$PIPELINE_DIR/steps/sample_targets.default"
   export QF_SAMPLING_ROOT="$PIPELINE_DIR/01_sampling" PIPELINE_PYTHON="$PYTHON"
   SAMPLE_JOB=$(sbatch --parsable "$PIPELINE_DIR/01_sampling/scripts/run_sample.sbatch" \
       "$PIPELINE_DIR/01_sampling/configs/datasets/keenable.yaml" "$SAMPLE_DIR" \
@@ -69,7 +69,7 @@ BLIND="$WORKDIR/blind_input.jsonl"
 if [[ -s "$BLIND" ]]; then
   echo "== blind input exists ($(wc -l < "$BLIND") docs), skipping"
 else
-  "$PYTHON" "$PIPELINE_DIR/make_blind_input.py" "$SAMPLE_DIR" "$BLIND"
+  "$PYTHON" "$PIPELINE_DIR/steps/make_blind_input.py" "$SAMPLE_DIR" "$BLIND"
 fi
 
 # ---- stage 2: serve --------------------------------------------------------
@@ -85,9 +85,9 @@ if serve_alive && [[ -s "$ENDPOINTS" ]]; then
 else
   [[ -n "$MODEL_GLOB" ]] || { echo "need --model-glob (or JUDGE_MODEL_GLOB)" >&2; exit 2; }
   rm -f "$ENDPOINTS"
-  export JUDGE_PIPELINE_DIR="$PIPELINE_DIR" JUDGE_MODEL_GLOB="$MODEL_GLOB" \
+  export JUDGE_PIPELINE_DIR="$PIPELINE_DIR/steps" JUDGE_MODEL_GLOB="$MODEL_GLOB" \
          JUDGE_LOG_ROOT="$WORKDIR/serve"
-  SERVE_JOB=$(sbatch --parsable "$PIPELINE_DIR/serve_judge.sbatch")
+  SERVE_JOB=$(sbatch --parsable "$PIPELINE_DIR/steps/serve_judge.sbatch")
   echo "$SERVE_JOB" > "$WORKDIR/serve/jobid"
   echo "== serve job $SERVE_JOB submitted, waiting for endpoints (queue + model load)"
   while [[ ! -s "$ENDPOINTS" ]]; do
@@ -103,7 +103,7 @@ echo "== ${#ENDPOINT_LIST[@]} endpoints ready"
 
 # ---- stage 3: judge (rounds until every id has a decision) -----------------
 for (( round=0; round<MAX_ROUNDS; round++ )); do
-  ROUND_DIR=$("$PYTHON" "$PIPELINE_DIR/shard_blind_input.py" "$BLIND" "$WORKDIR" "${#ENDPOINT_LIST[@]}")
+  ROUND_DIR=$("$PYTHON" "$PIPELINE_DIR/steps/shard_blind_input.py" "$BLIND" "$WORKDIR" "${#ENDPOINT_LIST[@]}")
   if [[ "$ROUND_DIR" == "DONE" ]]; then echo "== judging complete"; break; fi
   echo "== judge round: $ROUND_DIR"
   pids=()
@@ -148,7 +148,7 @@ EOF
 
 # ---- stage 5: statistics ---------------------------------------------------
 if [[ -s "$MERGED" ]]; then
-  "$PYTHON" "$PIPELINE_DIR/compute_label_stats.py" "$MERGED" "$SAMPLE_DIR" || true
+  "$PYTHON" "$PIPELINE_DIR/steps/compute_label_stats.py" "$MERGED" "$SAMPLE_DIR" || true
 fi
 
 # ---- stage 6: teardown -----------------------------------------------------
