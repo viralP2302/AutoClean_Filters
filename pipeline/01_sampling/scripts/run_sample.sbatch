@@ -22,8 +22,8 @@ set -euo pipefail
 umask 0007
 
 # Fused-repo layout: the component root comes from the pipeline driver (or
-# defaults to QF_Sampling under the submit directory for manual submits).
-ROOT=${QF_SAMPLING_ROOT:-$SLURM_SUBMIT_DIR/QF_Sampling}
+# defaults to pipeline/01_sampling under the submit directory for manual submits).
+ROOT=${QF_SAMPLING_ROOT:-$SLURM_SUBMIT_DIR/pipeline/01_sampling}
 PY=${PIPELINE_PYTHON:-/mnt/vast01/users/pochun.chang/miniconda3/envs/keenable/bin/python}
 cd "$ROOT"
 

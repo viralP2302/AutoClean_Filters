@@ -1,7 +1,7 @@
 # pipeline/ — one command from sampling to labels
 
-Drives the two fused components end to end: **`QF_Sampling/`** (the qf-tuner
-stratified sampler + annotator, stage 1) feeds **`LLM_Inference_LabelsAsGT/`**
+Drives the two fused components end to end: **`01_sampling/`** (the qf-tuner
+stratified sampler + annotator, stage 1) feeds **`02_llm_labeling/`**
 (the LLM judge, used verbatim — nothing in that folder is modified). One
 command goes corpus → stratified sample → blind input → judged labels +
 statistics:
@@ -23,7 +23,7 @@ Smoke run (20 docs per endpoint, server kept up for iteration):
 
 | stage | what | skip condition |
 |---|---|---|
-| sample | `QF_Sampling` (`qf_tuner sample` on one node via sbatch, then `annotate`): stratified draw over the labeled corpus with the allowlist targets in `sample_targets.default` (kept 2,000 + 1,285 per content rule; prefilters excluded by construction) | `sample.parquet` exists in `--sample-dir` |
+| sample | `01_sampling` (`qf_tuner sample` on one node via sbatch, then `annotate`): stratified draw over the labeled corpus with the allowlist targets in `sample_targets.default` (kept 2,000 + 1,285 per content rule; prefilters excluded by construction) | `sample.parquet` exists in `--sample-dir` |
 | blind | `sample.parquet` → `blind_input.jsonl` (`{id: uid, text, coverage:"complete"}`); blinding happens here — qf_reason/signals never leave the parquet | file exists |
 | serve | sbatch one 8-GPU node (our account), runs `serve_judge_vllm.sh` (adapted from viral's, env-driven): up to 4× TP=2 vLLM endpoints, GPU-cleanliness preflight, writes `serve/endpoints.txt` | serve job still running |
 | judge | pending ids (not yet in any `judge_out/shard_*.jsonl`) split round-robin across endpoints; one `run_inference.py` client per shard, in parallel; repeats rounds until every id has a decision (`--max-rounds`) | nothing pending |

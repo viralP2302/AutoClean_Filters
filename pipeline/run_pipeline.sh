@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One command: qf-tuner sample -> blind input -> vLLM serve -> parallel judging
-# -> merged labels -> statistics. Wraps LLM_Inference_LabelsAsGT/run_inference.py
+# -> merged labels -> statistics. Wraps pipeline/02_llm_labeling/run_inference.py
 # WITHOUT modifying it; every stage is idempotent and resumable (rerun the same
 # command after any interruption).
 #
@@ -24,7 +24,7 @@ set -Eeuo pipefail
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$PIPELINE_DIR")"
-CLIENT="$REPO_DIR/LLM_Inference_LabelsAsGT/run_inference.py"
+CLIENT="$PIPELINE_DIR/02_llm_labeling/run_inference.py"
 PYTHON=${PIPELINE_PYTHON:-python3}
 
 WORKDIR=${1:?usage: run_pipeline.sh WORKDIR [options]}; shift
@@ -48,20 +48,20 @@ WORKDIR="$(cd "$WORKDIR" && pwd)"
 echo "== pipeline workdir: $WORKDIR"
 echo "== sample:           $SAMPLE_DIR"
 
-# ---- stage 0: sampling (QF_Sampling — runs when the sample doesn't exist) --
+# ---- stage 0: sampling (01_sampling — runs when the sample doesn't exist) --
 if [[ ! -s "$SAMPLE_DIR/sample.parquet" ]]; then
   echo "== no sample.parquet at $SAMPLE_DIR — running the sampling stage"
   read -r -a SAMPLE_TARGETS < "$PIPELINE_DIR/sample_targets.default"
-  export QF_SAMPLING_ROOT="$REPO_DIR/QF_Sampling" PIPELINE_PYTHON="$PYTHON"
-  SAMPLE_JOB=$(sbatch --parsable "$REPO_DIR/QF_Sampling/scripts/run_sample.sbatch" \
-      "$REPO_DIR/QF_Sampling/configs/datasets/keenable.yaml" "$SAMPLE_DIR" \
+  export QF_SAMPLING_ROOT="$PIPELINE_DIR/01_sampling" PIPELINE_PYTHON="$PYTHON"
+  SAMPLE_JOB=$(sbatch --parsable "$PIPELINE_DIR/01_sampling/scripts/run_sample.sbatch" \
+      "$PIPELINE_DIR/01_sampling/configs/datasets/keenable.yaml" "$SAMPLE_DIR" \
       "${SAMPLE_TARGETS[@]}")
   echo "== sampling job $SAMPLE_JOB submitted, waiting"
   while squeue -j "$SAMPLE_JOB" -h 2>/dev/null | grep -q .; do sleep 60; done
   [[ -s "$SAMPLE_DIR/sample.parquet" ]] || {
     echo "sampling job $SAMPLE_JOB produced no sample.parquet — see logs/" >&2; exit 3; }
-  PYTHONPATH="$REPO_DIR/QF_Sampling/src" "$PYTHON" -m qf_tuner annotate \
-      --sample "$SAMPLE_DIR" --pack "$REPO_DIR/QF_Sampling/filter_packs/cc_baseline"
+  PYTHONPATH="$PIPELINE_DIR/01_sampling/src" "$PYTHON" -m qf_tuner annotate \
+      --sample "$SAMPLE_DIR" --pack "$PIPELINE_DIR/01_sampling/filter_packs/cc_baseline"
 fi
 
 # ---- stage 1: blind input --------------------------------------------------
