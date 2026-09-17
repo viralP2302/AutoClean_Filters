@@ -19,6 +19,31 @@ Smoke run (20 docs per endpoint, server kept up for iteration):
 ... run_pipeline.sh /path/to/smoke --limit 20 --keep-server
 ```
 
+## Walkthrough: a full run
+
+1. **One-time prerequisites**: a python with pandas/pyarrow
+   (`PIPELINE_PYTHON`), and a readable judge-model snapshot for
+   `--model-glob` (the round-1 Qwen3-32B weights need to be copied
+   somewhere group-readable first).
+2. **Smoke first** — 20 documents per endpoint, server kept alive:
+   ```bash
+   PIPELINE_PYTHON=<python> bash pipeline/run_pipeline.sh <workdir>-smoke \
+       --model-glob '<snapshot>/*' --limit 20 --keep-server
+   ```
+   Check `<workdir>-smoke/labels/stats.md`. The expensive part (vLLM model
+   load, ~10–20 min) stays up thanks to `--keep-server`.
+3. **Full run** — same command, real workdir, no `--limit`. Two variants:
+   * label the existing 20k sample (the default `--sample-dir`): nothing
+     else to pass;
+   * start from the corpus: pass a `--sample-dir` that does not exist yet —
+     stage 0 samples it first (targets in `sample_targets.default`).
+4. **Watch**: `serve/vllm-*.log` (server), `judge_out/*.log` (clients),
+   `squeue` for the jobs. Interrupted? **Rerun the identical command** —
+   every already-judged id is skipped, the server is reused if alive.
+5. **Results**: `labels/raw_llm_responses.jsonl` (decisions, `id` = uid),
+   `labels/stats.md` (per-rule recovery, kept agreement, review share),
+   `labels/missing_ids.txt` (should be empty; if not, rerun the command).
+
 ## Stages (all idempotent — rerun the same command to resume)
 
 | stage | what | skip condition |
