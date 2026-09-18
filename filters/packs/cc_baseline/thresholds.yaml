@@ -1,0 +1,49 @@
+# Thresholds of the CC/TxT360 quality-filter rule chain.
+#
+# Values are IDENTICAL to rules/threshold.py (DataThreshold defaults) — this file
+# is the pack-level declaration that the tuner reads and (in derived packs) edits.
+# In this baseline pack it must never be changed; fork the pack directory to tune.
+# n-gram entries are [n, threshold] pairs; a document is rejected if the fraction
+# for any listed n exceeds its threshold (the chain stops at the first).
+
+# pre-signal stages
+lang_score: 0.65               # fastText en score lower bound
+url_score: 3.0
+min_word_count_per_line: 1
+
+# repetition rules (Gopher)
+fraction_of_duplicate_lines: 0.3
+fraction_of_characters_in_duplicate_lines: 0.2
+fraction_of_duplicate_paragraphs: 0.3
+fraction_of_characters_in_duplicate_paragraphs: 0.2
+fraction_of_characters_in_most_common_ngram: [[2, 0.20], [3, 0.18], [4, 0.16]]
+fraction_of_characters_in_duplicate_ngrams: [[5, 0.15], [6, 0.14], [7, 0.13], [8, 0.12], [9, 0.11], [10, 0.10]]
+
+# line-wise heuristics
+fraction_of_words_corrected_in_lines: 0.05
+fraction_of_lines_ending_with_ellipsis: 0.30
+fraction_of_lines_starting_with_bullet_point: 0.90
+fraction_of_lines_with_toxic_words: 0.10   # toxicity rules disabled in the chain
+num_of_lines_with_toxic_words: 8
+num_of_toxic_words: 10
+
+# statistics-based heuristics
+word_count: [50, 100000]                   # [lower, upper]
+mean_word_length: [3.0, 10.0]              # [lower, upper]
+num_of_sentences: 3
+symbol_to_word_ratio: 0.1
+fraction_of_words_with_alpha_character: 0.8
+num_of_stop_words: 2
+num_of_paragraphs: 0                       # unused by the chain
+
+# others
+has_curly_bracket: false                   # false = rule disabled
+has_lorem_ipsum: true                      # true = rule enabled
+
+# line-level refinement (dedup stage; not active in the chain we run)
+min_dup_text_len: 20
+
+# --- tuner policy (see docs/DESIGN.md) ---
+# Which rules the tuner may modify. Empty = policy not decided yet; the tuner
+# refuses to run until this is filled in on a derived (non-baseline) pack.
+tunable: []

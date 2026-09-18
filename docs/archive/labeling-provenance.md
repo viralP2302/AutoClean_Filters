@@ -1,5 +1,8 @@
 # Clean LLM quality-judge inference
 
+> Historical component documentation, retained for completed-run provenance.
+> Current paths and operating instructions are in [the repo guide](../../README.md).
+
 This is a minimal review copy of the inference code used to label the balanced
 20,000-document Keenable quality-filter sample with `Qwen/Qwen3-32B` through
 an OpenAI-compatible vLLM endpoint.

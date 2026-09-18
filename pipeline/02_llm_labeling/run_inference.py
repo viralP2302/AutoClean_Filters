@@ -7,11 +7,15 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, Iterable
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from filter_provenance import sample_filter
 
 
 ROOT = Path(__file__).resolve().parent
@@ -278,6 +282,7 @@ def run(args: argparse.Namespace) -> None:
     output = Path(args.output)
     if output.exists():
         raise ValueError(f"Output already exists: {output}. Choose a new path.")
+    filter_pack = sample_filter(args.sample_meta)
     rows = list(read_rows(args.input))
     if args.limit:
         rows = rows[: args.limit]
@@ -285,6 +290,7 @@ def run(args: argparse.Namespace) -> None:
         raise ValueError("Input IDs must be unique")
 
     config = {
+        "filter_pack": filter_pack,
         "backend": "vllm_dynamic_context",
         "model": args.model,
         "base_url": args.base_url,
@@ -322,6 +328,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", help="JSON or JSONL document input")
     parser.add_argument("output", help="New JSONL output; must not already exist")
+    parser.add_argument("--sample-meta", required=True,
+                        help="source sample's meta.json; inherits its saved filter version")
     parser.add_argument("--base-url", required=True, help="OpenAI-compatible base URL ending in /v1")
     parser.add_argument("--model", default="judge", help="Served model name")
     parser.add_argument("--max-new-tokens", type=int, default=768)
@@ -338,4 +346,3 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     run(parse_args())
-

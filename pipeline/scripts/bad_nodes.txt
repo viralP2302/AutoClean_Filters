@@ -1,0 +1,11 @@
+# Nodes to exclude from every array job (one per line). Symptom so far is always
+# a broken /mnt/vast01 mount: every file in the task fails with FileNotFoundError
+# within seconds. Verified with sacct -j JOBID -X -o JobID,State,NodeList.
+auh7-3b-gpu-016
+auh7-4b-gpu-129
+auh7-4b-gpu-194
+auh7-3b-gpu-002
+auh7-4b-gpu-156
+auh7-3b-gpu-090
+auh7-3b-gpu-114
+auh7-3b-gpu-153
