@@ -1,3 +1,5 @@
+Archived, unimplemented task-layout sketch. See [the current repo guide](../../README.md).
+
 | 相對路徑                            | 內容                       | 誰使用              |
 | ------------------------------- | ------------------------ | ---------------- |
 | `instruction.md`                | 工作目標、允許修改的範圍、完成條件        | AI agent 讀取      |

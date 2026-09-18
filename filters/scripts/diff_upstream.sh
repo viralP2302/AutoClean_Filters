@@ -1,9 +1,9 @@
 #!/bin/bash
 # Has a pack's rule snapshot drifted from the QF main repo?
-# usage: scripts/diff_upstream.sh [PACK_DIR] [UPSTREAM_QF_DIR]
+# usage: bash filters/scripts/diff_upstream.sh PACK_DIR UPSTREAM_QF_DIR
 set -euo pipefail
-PACK="${1:-filter_packs/cc_baseline}"
-UP="${2:-/mnt/vast01/users/pochun.chang/projects/pipeline/quality_filtering}"
+PACK="${1:?provide the filter pack directory}"
+UP="${2:?provide the upstream quality_filtering directory}"
 
 echo "upstream: $UP @ $(git -C "$UP" rev-parse --short HEAD 2>/dev/null || echo '?')"
 status=0

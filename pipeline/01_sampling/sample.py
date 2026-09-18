@@ -1,10 +1,11 @@
-"""Stage 1 pipeline: pure stratified sampling over a labeled corpus.
+#!/usr/bin/env python3
+"""Stage 1: stratified sampling of a prepared dataset (README.md#input-schema).
 
-The sampler knows nothing about quality filters. Its whole contract:
+The sampler records the producing filter version and samples prepared data:
 
   input   parquet shards where every document carries a label column
           (`qf_reason`: the reserved value `kept` for accepted documents, any
-          other value = a rejection label — docs/NAMING.md) — plus whatever
+          other value = a rejection label) — plus whatever
           other columns exist, which are passed through untouched
   output  a stratified sample: for each distinct label, `--target-default`
           documents (overridable per label with `--target LABEL=COUNT`),
@@ -17,15 +18,18 @@ The flow, in the order run() calls it:
   count_pass      exact per-label counts across the pool (label column only)
   draw            exact global ranks per label, mapped to (shard, local rank)
   fetch_pass      read just the drawn rows + the raw-text mirror
-  write_outputs   sample.parquet + meta.json + pool_shards.txt
+  run             write sample.parquet + meta.json + pool_shards.txt
 
-Verdict columns (viol_*, n_violations, ...) are NOT computed here — that is
-the annotate stage (`qf_tuner annotate`), or the corpus already carries them
-from filter time and they simply pass through.
+Signals and verdict columns (viol_*, n_violations, ...) are copied from the
+input. Dataset preparation, applying QF, and filter versioning live upstream
+of this command. Sampling records the named pack's fingerprint without
+executing its code or generating QF columns.
 """
 
+import argparse
 import json
 import random
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -38,11 +42,26 @@ import pandas as pd
 import pyarrow.parquet as pq
 import yaml
 
-from .. import __version__
-from ..provenance import git_state
-from .shard_io import count_shard, fetch_shard, initialize_worker
+from shard_io import count_shard, fetch_shard, initialize_worker
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from filter_provenance import describe_pack
 
 LABEL_COLUMN_KEY = "reason_column"
+TOOL_VERSION = "0.3.0"
+
+
+def git_state():
+    """Record the producing code revision, including uncommitted changes."""
+    cwd = Path(__file__).resolve().parent
+    try:
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=cwd,
+                                capture_output=True, text=True).stdout.strip()
+        dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=cwd,
+                                    capture_output=True, text=True).stdout.strip())
+        return (commit + "-dirty") if dirty else (commit or None)
+    except Exception:
+        return None
 
 
 def parse_targets(target_default, target_overrides):
@@ -50,7 +69,7 @@ def parse_targets(target_default, target_overrides):
     overrides = {}
     for entry in target_overrides or []:
         label, _, count = entry.partition("=")
-        if not count.isdigit():
+        if not label or not count.isdigit():
             sys.exit(f"--target expects LABEL=COUNT, got {entry!r}")
         overrides[label] = int(count)
     return target_default, overrides
@@ -183,14 +202,22 @@ def order_columns(sample_frame, dataset_config):
 
 def run(args):
     try:
+        filter_pack = describe_pack(args.filter_pack)
+    except (OSError, ValueError) as error:
+        sys.exit(f"ERROR: {error}")
+    try:
         set_start_method("fork")  # python>=3.14 defaults to forkserver; workers need our globals
     except RuntimeError:
         pass
 
     dataset_config = yaml.safe_load(Path(args.dataset).read_text())
     if dataset_config.get("kind") != "qf_output_parquet":
-        sys.exit(f"dataset kind {dataset_config.get('kind')!r} not implemented yet — "
-                 "the sampler needs labeled shards (see docs/DATASET_INPUT.md)")
+        sys.exit("sampling requires kind: qf_output_parquet with QF results already "
+                 "prepared upstream (see README.md#input-schema)")
+    if (dataset_config.get(LABEL_COLUMN_KEY) != "qf_reason"
+            or dataset_config.get("columns", {}).get("id") != "uid"):
+        sys.exit("the pipeline input contract requires reason_column: qf_reason and "
+                 "columns.id: uid; prepare these columns upstream")
     target_default, target_overrides = parse_targets(args.target_default, args.target)
     output_dir = Path(args.out)
     if (output_dir / "sample.parquet").exists():
@@ -199,6 +226,8 @@ def run(args):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     pool_shards, manifest_size, rng = choose_pool(dataset_config, args.pool_shards, args.seed)
+    if not pool_shards:
+        sys.exit("the dataset manifest contains no shards")
     print(f"dataset={dataset_config['name']} pool={len(pool_shards)}/{manifest_size} shards "
           f"seed={args.seed} processes={args.processes}", flush=True)
 
@@ -218,7 +247,8 @@ def run(args):
     (output_dir / "pool_shards.txt").write_text("".join(name + "\n" for name in usable_shards))
     meta = {
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "tool": {"version": __version__, "git": git_state()},
+        "tool": {"version": TOOL_VERSION, "git": git_state()},
+        "filter_pack": filter_pack,
         "dataset": {"name": dataset_config["name"], "config": str(Path(args.dataset).resolve()),
                     "qf_root": dataset_config["qf_root"], "raw_root": dataset_config["raw_root"]},
         "seed": args.seed,
@@ -245,11 +275,29 @@ def run(args):
               f"{achieved.get(label, 0):>8,}")
     print(f"\nwrote {len(sample_frame):,} docs -> {output_dir / 'sample.parquet'}", flush=True)
 
-    if not has_verdicts:
-        banner = "!" * 78
-        print(f"\n{banner}\n"
-              "!! WARNING: this corpus carries NO verdict columns (viol_*).\n"
-              "!! Per-rule analysis (judge follow-up, sweeps, rescue counts) needs them.\n"
-              "!! Run, with the pack recorded in the corpus's provenance:\n"
-              f"!!     qf_tuner annotate --sample {output_dir} --pack <pack>\n"
-              f"{banner}\n", flush=True)
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Stratified sampling of prepared QF-labeled Parquet shards.",
+        epilog="Input contract: README.md#input-schema. "
+               "Existing QF columns are copied; no filter is applied.")
+    parser.add_argument("--dataset", required=True, help="prepared-dataset YAML")
+    parser.add_argument("--filter-pack", required=True,
+                        help="saved version name in filters/packs/ that produced the dataset")
+    parser.add_argument("--out", required=True, help="new sample directory")
+    parser.add_argument("--pool-shards", type=int, default=1200)
+    parser.add_argument("--target-default", type=int, default=1500,
+                        help="documents per qf_reason, unless overridden")
+    parser.add_argument("--target", action="append", metavar="LABEL=COUNT",
+                        default=["kept=10000"],
+                        help="repeatable per-label target (includes kept=10000 by default)")
+    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--processes", type=int, default=32)
+    args = parser.parse_args()
+    if args.pool_shards <= 0 or args.processes <= 0 or args.target_default < 0:
+        parser.error("pool-shards/processes must be positive; target-default must be non-negative")
+    return args
+
+
+if __name__ == "__main__":
+    run(parse_args())

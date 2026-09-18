@@ -17,13 +17,19 @@ from pathlib import Path
 
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from filter_provenance import sample_filter
+
 merged_path = Path(sys.argv[1])
 sample_dir = Path(sys.argv[2])
+filter_pack = sample_filter(sample_dir / "meta.json")
 
 decisions = []
 for line in open(merged_path, encoding="utf-8"):
     if line.strip():
         row = json.loads(line)
+        if row.get("run", {}).get("filter_pack") != filter_pack:
+            sys.exit("judge output filter version does not match the sample")
         decisions.append((row["id"], row["decision"]))
 labels = pd.DataFrame(decisions, columns=["uid", "decision"])
 if not labels["uid"].is_unique:
@@ -55,6 +61,7 @@ for rule, group in joined[joined["qf_reason"] != "kept"].groupby("qf_reason"):
 per_rule.sort(key=lambda entry: -entry["recovery_rate_conservative"])
 
 stats = {
+    "filter_pack": filter_pack,
     "documents": len(joined),
     "decisions": overall,
     "kept_agreement": {
@@ -71,6 +78,7 @@ stats_json.write_text(json.dumps(stats, indent=2))
 
 lines = [
     "# Judge run statistics", "",
+    f"Filter pack: `{filter_pack['name']}` (SHA-256: `{filter_pack['sha256']}`)", "",
     f"Documents: {len(joined):,}  |  decisions: {overall}", "",
     f"QF-kept agreement: raw {stats['kept_agreement']['keep_rate_raw']:.1%}, "
     f"non-review {stats['kept_agreement']['keep_rate_non_review']:.1%} ({kept_arm})", "",

@@ -6,7 +6,7 @@ qf_root: /mnt/vast01/shared/ifm_data/qf_full-20260708
 raw_root: /mnt/vast01/shared/ifm_data/md_strip_full-20260708
 manifest: /mnt/vast01/users/pochun.chang/projects/keenable/md-conversion/manifests/all_files.txt
 
-reason_column: qf_reason   # value `kept` = accepted (reserved, docs/NAMING.md)
+reason_column: qf_reason   # value `kept` = accepted (reserved, README.md#input-schema)
 columns:
   id: uid
   url: url

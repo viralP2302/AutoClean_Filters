@@ -4,7 +4,7 @@
 
 Single change: `thresholds.yaml` `word_count: [50, 100000]` → `[1, 100000]`
 (the 50-word lower bound is disabled; the 100k upper bound stays). Everything
-else — rules.yaml, rules/ code, all other thresholds — is byte-identical to
+else — rules/ code and all other thresholds — is byte-identical to
 cc_baseline, so thresholds.yaml deliberately diverges from the pinned
 threshold.py on this one key.
 

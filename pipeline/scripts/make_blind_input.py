@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Adapter: qf-tuner sample.parquet -> blind judge input jsonl.
+"""Adapter: sample.parquet -> blind judge input jsonl.
 
-Emits exactly the schema LLM_Inference_LabelsAsGT/run_inference.py consumes:
+Emits exactly the schema 02_llm_labeling/run_inference.py consumes:
 one line per document, {"id", "text", "coverage"}. `id` is the corpus uid, so
 labels join back to the sample (and to qf_full) with no extra mapping. Nothing
 else — no qf_reason, no signals — ever enters this file: blinding happens

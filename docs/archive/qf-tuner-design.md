@@ -1,5 +1,9 @@
 # qf-tuner — design
 
+> Archived design from the standalone qf-tuner project. This file includes
+> unimplemented proposals and historical paths. Current behavior is documented
+> in [the repo README](../../README.md).
+
 Goal: make per-dataset quality-filter tuning a repeatable, automated process.
 An LLM judge finds documents the filter wrongly rejected (false positives);
 an automated tuner adjusts the filter to retain them without letting garbage

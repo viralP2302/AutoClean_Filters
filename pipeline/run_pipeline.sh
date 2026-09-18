@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# One command: qf-tuner sample -> blind input -> vLLM serve -> parallel judging
+# One command: prepared dataset -> sample -> blind input -> vLLM -> judging
 # -> merged labels -> statistics. Wraps pipeline/02_llm_labeling/run_inference.py
-# WITHOUT modifying it; every stage is idempotent and resumable (rerun the same
-# command after any interruption).
+# Existing samples and completed judge IDs are reused when rerunning the
+# same command in the same workdir.
 #
 # usage:
 #   bash pipeline/run_pipeline.sh WORKDIR \
-#       --sample-dir /path/to/qf_tuner_sample \
+#       --sample-dir /path/to/sample \
+#       --filter-pack cc_baseline \
 #       --model-glob '/path/to/hub/models--Qwen--Qwen3-32B/snapshots/*' \
+#       [--dataset prepared_dataset.yaml] [--sampling-targets targets.conf] \
 #       [--limit N] [--keep-server] [--max-rounds 3]
 #
 # WORKDIR layout it produces:
@@ -23,12 +25,32 @@
 set -Eeuo pipefail
 
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(dirname "$PIPELINE_DIR")"
 CLIENT="$PIPELINE_DIR/02_llm_labeling/run_inference.py"
 PYTHON=${PIPELINE_PYTHON:-python3}
 
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+  cat <<'EOF'
+Usage: bash pipeline/run_pipeline.sh WORKDIR [options]
+  --sample-dir DIR        Reuse this sample, or create it from the prepared dataset
+  --filter-pack NAME      Required saved filter version in filters/packs/
+  --dataset YAML         Prepared-dataset config (default: configs/datasets/keenable.yaml)
+  --sampling-targets FILE One line of sampler target arguments (default: configs/judge_round_targets.conf)
+  --model-glob GLOB       Readable judge-model snapshot
+  --limit N              Smoke run: N documents per endpoint
+  --keep-server          Keep the serving job after this run
+  --max-rounds N         Maximum rounds for missing IDs (default: 3)
+
+Prepare QF results, signals, and required rule verdicts upstream; this command
+samples the prepared data and preserves its existing QF columns.
+EOF
+  exit 0
+fi
+
 WORKDIR=${1:?usage: run_pipeline.sh WORKDIR [options]}; shift
 SAMPLE_DIR=${SAMPLE_DIR:-/mnt/vast01/shared/ifm_data/qf_tuner_samples/keenable_judge20k_v0}
+DATASET="$PIPELINE_DIR/configs/datasets/keenable.yaml"
+TARGETS_FILE="$PIPELINE_DIR/configs/judge_round_targets.conf"
+FILTER_PACK=""
 MODEL_GLOB=${JUDGE_MODEL_GLOB:-}
 LIMIT=0
 KEEP_SERVER=0
@@ -36,6 +58,9 @@ MAX_ROUNDS=3
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --sample-dir)  SAMPLE_DIR=$2; shift 2 ;;
+    --filter-pack) FILTER_PACK=$2; shift 2 ;;
+    --dataset)     DATASET=$2; shift 2 ;;
+    --sampling-targets) TARGETS_FILE=$2; shift 2 ;;
     --model-glob)  MODEL_GLOB=$2; shift 2 ;;
     --limit)       LIMIT=$2; shift 2 ;;
     --keep-server) KEEP_SERVER=1; shift ;;
@@ -43,6 +68,9 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
+[[ -n "$FILTER_PACK" ]] || { echo "need --filter-pack NAME (saved in filters/packs/)" >&2; exit 2; }
+"$PYTHON" "$PIPELINE_DIR/filter_provenance.py" \
+    --filter-pack "$FILTER_PACK" --sample-dir "$SAMPLE_DIR" --workdir "$WORKDIR"
 mkdir -p "$WORKDIR"/{serve,judge_out,labels}
 WORKDIR="$(cd "$WORKDIR" && pwd)"
 echo "== pipeline workdir: $WORKDIR"
@@ -51,17 +79,18 @@ echo "== sample:           $SAMPLE_DIR"
 # ---- stage 0: sampling (01_sampling — runs when the sample doesn't exist) --
 if [[ ! -s "$SAMPLE_DIR/sample.parquet" ]]; then
   echo "== no sample.parquet at $SAMPLE_DIR — running the sampling stage"
-  read -r -a SAMPLE_TARGETS < "$PIPELINE_DIR/configs/judge_round_targets.conf"
+  read -r -a SAMPLE_TARGETS < "$TARGETS_FILE"
   export QF_SAMPLING_ROOT="$PIPELINE_DIR/01_sampling" PIPELINE_PYTHON="$PYTHON"
-  SAMPLE_JOB=$(sbatch --parsable "$PIPELINE_DIR/01_sampling/scripts/run_sample.sbatch" \
-      "$PIPELINE_DIR/01_sampling/configs/datasets/keenable.yaml" "$SAMPLE_DIR" \
-      "${SAMPLE_TARGETS[@]}")
+  SAMPLE_JOB=$(sbatch --parsable \
+      --output="$WORKDIR/sample-%j.out" --error="$WORKDIR/sample-%j.err" \
+      "$PIPELINE_DIR/scripts/run_sample.sbatch" "$DATASET" "$SAMPLE_DIR" \
+      "${SAMPLE_TARGETS[@]}" --filter-pack "$FILTER_PACK")
   echo "== sampling job $SAMPLE_JOB submitted, waiting"
   while squeue -j "$SAMPLE_JOB" -h 2>/dev/null | grep -q .; do sleep 60; done
   [[ -s "$SAMPLE_DIR/sample.parquet" ]] || {
-    echo "sampling job $SAMPLE_JOB produced no sample.parquet — see logs/" >&2; exit 3; }
-  PYTHONPATH="$PIPELINE_DIR/01_sampling/src" "$PYTHON" -m qf_tuner annotate \
-      --sample "$SAMPLE_DIR" --pack "$PIPELINE_DIR/01_sampling/filter_packs/cc_baseline"
+    echo "sampling job $SAMPLE_JOB produced no sample.parquet — see $WORKDIR/sample-*.err" >&2; exit 3; }
+  "$PYTHON" "$PIPELINE_DIR/filter_provenance.py" \
+      --filter-pack "$FILTER_PACK" --sample-dir "$SAMPLE_DIR" --workdir "$WORKDIR"
 fi
 
 # ---- stage 1: blind input --------------------------------------------------
@@ -113,6 +142,7 @@ for (( round=0; round<MAX_ROUNDS; round++ )); do
     out_file="$WORKDIR/judge_out/shard_$(basename "$ROUND_DIR")_$(basename "$shard_file" .jsonl).jsonl"
     limit_args=(); [[ "$LIMIT" -gt 0 ]] && limit_args=(--limit "$LIMIT")
     python3 "$CLIENT" "$shard_file" "$out_file" --base-url "$endpoint" --model judge \
+        --sample-meta "$SAMPLE_DIR/meta.json" \
         "${limit_args[@]}" > "$WORKDIR/judge_out/$(basename "$out_file" .jsonl).log" 2>&1 &
     pids+=("$!")
     shard_index=$((shard_index + 1))

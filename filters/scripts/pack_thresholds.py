@@ -4,16 +4,17 @@
 The yaml duplicates the defaults of DataThreshold in <pack>/rules/threshold.py.
 That duplication must never be maintained by hand:
 
-  generate   python scripts/pack_thresholds.py PACK_DIR --write
+  generate   python filters/scripts/pack_thresholds.py PACK_DIR --write
              (re)writes thresholds.yaml from the code defaults; policy keys
              already in the yaml (e.g. `tunable`) are preserved.
              Use when cutting a new baseline from upstream.
 
-  check      python scripts/pack_thresholds.py PACK_DIR
+  check      python filters/scripts/pack_thresholds.py PACK_DIR
              lists every key whose yaml value differs from the code default.
              For a BASELINE pack the list must be empty; for a tuned pack the
-             list IS the tuning (thresholds.yaml overrides the code at run
-             time, so a diff here is intentional and belongs in the CHANGELOG).
+             list describes the intentional parameter changes, which belong in
+             the CHANGELOG. Callers executing the original rules must explicitly
+             load these parameter overrides.
 
 threshold.py only imports the stdlib, so this runs anywhere (no QF runtime).
 """
@@ -60,7 +61,7 @@ def main():
             merged[k] = current.get(k, [])
         yaml_path.write_text(
             "# GENERATED from rules/threshold.py by scripts/pack_thresholds.py — do not hand-edit\n"
-            "# a baseline; in a tuned pack, edited values here override the code at run time.\n"
+            "# a baseline; consumers of a derived pack must load its YAML parameters.\n"
             + yaml.safe_dump(merged, sort_keys=False))
         print(f"wrote {yaml_path} ({len(defaults)} threshold keys, policy keys preserved)")
         return
